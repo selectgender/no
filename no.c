@@ -1,5 +1,28 @@
 /*
+	# no
+	*no*thing fancy. my cute text editor!
+
+	# build:
+	```sh
 	cc -std=c89 -Wall -Wextra -Wpedantic -o no no.c
+	```
+
+	# goals
+	- [ ] modal
+	- [ ] search
+	- [ ] undo / redo
+	- [ ] range selection
+	- [ ] per filetype config
+
+	# implementation
+	if i havent written this by the time im finished with the program you
+	can remind me!!!
+
+	# why the name?
+	my favorite community college professor taught calculus III really well
+	and something that he would always say after an explanation is
+	"nothing fancy." math doesnt need to be hard. text editors dont need to
+	be hard either!
 */
 
 #include <stdio.h>
@@ -29,6 +52,7 @@ char *view = NULL;
 int view_used = 0;
 int view_size = 0;
 int view_rows = 0;
+int view_line = 0;
 
 int *lines = NULL;
 int lines_gap = 0;
@@ -103,7 +127,7 @@ void buf_move_to(int n) {
 void buf_grow(int n) {
 	int bump;
 	char *dst;
-	char * src;
+	char *src;
 	size_t size;
 
 	if (buf_gap >= n) {
@@ -209,9 +233,9 @@ void lines_init(void) {
 int lines_get_len(int i) {
 	if (i != lines_size - lines_gap) {
 		return lines_get_line(i + 1) - lines_get_line(i);
+	} else {
+		return buf_size - buf_gap - lines_get_line(i);
 	}
-
-	return buf_size - buf_gap - lines_get_line(i);
 }
 
 void view_init(void) {
@@ -254,11 +278,21 @@ void view_write_char(char c) {
 }
 
 void view_write_cursor(void) {
-	char cursor_buf[32];
-	int cursor_len;
+	char cbuf[32];
+	int len;
+	int x = col + 1;
+	int y = line - view_line;
+	int i;
+	int line_len = lines_get_line(line);
 
-	cursor_len = snprintf(cursor_buf, sizeof(cursor_buf), "\x1b[%d;%dH", line + 1, col + 1);
-	view_push(cursor_buf, cursor_len);
+	for (i = line_len; i < line_len + col; i++) {
+		if (buf_get_char(i) == '\t') {
+			x += TAB - 1;
+		}
+	}
+
+	len = snprintf(cbuf, sizeof(cbuf), "\x1b[%d;%dH", y + 1, x);
+	view_push(cbuf, len);
 }
 
 void view_write(void) {
@@ -269,11 +303,11 @@ void view_write(void) {
 
 	view_push("\x1b[H\x1b[K\x1b[?25l", 12);
 
-	for (i = 0; i < buf_start && view_rows < HEIGHT; i++) {
+	for (i = lines_get_line(view_line); i < buf_start && view_rows < HEIGHT; i++) {
 		view_write_char(buf[i]);
 	}
 
-	for (i = buf_start + buf_gap; i < buf_size && view_rows < HEIGHT; i++) {
+	for (i += buf_gap; i < buf_size && view_rows < HEIGHT; i++) {
 		view_write_char(buf[i]);
 	}
 
@@ -322,12 +356,20 @@ void cursor_down(void) {
 		line++;
 		cursor_correct_col();
 	}
+
+	if (line - view_line > HEIGHT) {
+		view_line++;
+	}
 }
 
 void cursor_up(void) {
 	if (line > 0) {
 		line--;
 		cursor_correct_col();
+	}
+
+	if (line - view_line < 0) {
+		view_line--;
 	}
 }
 
@@ -394,7 +436,6 @@ void backspace(void) {
 	if (col == 0) {
 		col = lines_get_len(line - 1) - 1;
 		abs_col = col;
-
 		lines_move_to(line);
 		lines_gap++;
 		line--;
@@ -404,6 +445,17 @@ void backspace(void) {
 	}
 
 	decrement_lines();
+}
+
+void save(void) {
+	FILE *f;
+
+	f = fopen("TEST", "w");
+
+	fwrite(buf, buf_start, 1, f);
+	fwrite(buf + buf_start + buf_gap, buf_size - buf_start - buf_gap, 1, f);
+
+	fclose(f);
 }
 
 void quit(void) {
@@ -471,6 +523,9 @@ void input(void) {
 		break;
 	case 13: /* this is the enter key. will find a better way to represent this later. */
 		insert_line();
+		break;
+	case CTRL_KEY('s'):
+		save();
 		break;
 	case CTRL_KEY('q'):
 		quit();
