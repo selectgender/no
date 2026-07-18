@@ -1,6 +1,4 @@
 /*
- * gap-buffer.c
- *
  * gap buffers make insertion into the middle of arrays easy
  *
  * the transformation:
@@ -73,6 +71,8 @@ void gap_buf_new(struct gap_buf *g, int s)
  *
  * the bump value is set in a rather confusing way but it makes more sense
  * once you realize we are using integer division
+ *
+ * note that pos - gap is not undercounting by 1 as pos is 0-indexed :D
  *
  * c a _ _ _ _ c a
  *     ^ pos = 2
@@ -289,8 +289,7 @@ void gap_buf_print(struct gap_buf *g)
 	for (i = 0; i < g->pos * 2; i++)
 		printf(" ");
 
-	printf("^ pos = %d", g->pos);
-	printf("\n");
+	printf("^ pos = %d\n", g->pos);
 
 	for (i = 0; i < g->pos * 2; i++)
 		printf(" ");
@@ -298,8 +297,6 @@ void gap_buf_print(struct gap_buf *g)
 	for (i = 0; i < g->gap; i++)
 		printf("^ ");
 
-	printf("gap = %d", g->gap);
-	printf("\n");
-	printf("size = %d", g->size);
-	printf("\n\n");
+	printf("gap = %d\n", g->gap);
+	printf("size = %d\n\n", g->size);
 }
