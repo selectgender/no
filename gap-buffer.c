@@ -119,7 +119,7 @@ void gap_buf_grow(struct gap_buf *g, int n)
 	dst = src + bump;
 	size = g->size - g->pos - g->gap;
 
-	g->buf = realloc(g->buf, g->size + bump);
+	g->buf = realloc(g->buf, sizeof(*g->buf) * (g->size + bump));
 	memcpy(&g->buf[dst], &g->buf[src], size);
 	g->size += bump;
 	g->gap += bump;
