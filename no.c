@@ -68,6 +68,7 @@ char *view = NULL;
 int view_used = 0;
 int view_size = 0;
 int view_rows = 0;
+int view_cols = 0;
 int view_line = 0;
 
 int *lines = NULL;
@@ -84,8 +85,7 @@ enum status status = NONE;
 
 int searching = 0;
 char search[SEARCH_SIZE] = { 0 };
-int search_pos = 0;
-int search_gap = SEARCH_SIZE;
+int search_used = 0;
 int search_cursor = 0;
 
 int written = 0;
@@ -179,7 +179,7 @@ void buf_grow(int n) {
 	src = buf_pos + buf_gap;
 	dst = src + bump;
 	size = buf_size - buf_pos - buf_gap;
-	memcpy(&buf[dst], &buf[src], size);
+	memcpy(&buf[dst], &buf[src], size * sizeof(char));
 	buf_gap += bump;
 	buf_size += bump;
 }
@@ -249,7 +249,7 @@ void lines_grow(int n) {
 	src = lines_pos + lines_gap;
 	dst = src + bump;
 	size = lines_size - lines_pos - lines_gap;
-	memcpy(&lines[dst], &lines[src], size);
+	memcpy(&lines[dst], &lines[src], size * sizeof(int));
 	lines_gap += bump;
 	lines_size += bump;
 }
@@ -288,22 +288,55 @@ int lines_get_len(int i) {
 	}
 }
 
-int search_used(void) {
-	return SEARCH_SIZE - search_gap;
+int nearest_line_index(int l) {
+	int min = 0;
+	int max = lines_size - 1;
+	int i = (min + max) / 2;
+
+	while (max - min > 1) {
+		i = (min + max) / 2;
+
+		if (lines[i] > l) {
+			max = i;
+		} else if (lines[i] < l) {
+			min = i;
+		} else {
+			return i;	
+		}
+	}
+
+	return min;
 }
 
+void search_clear(void) {
+	search_used = 0;
+	search_cursor = 0;
+}
+
+/* memmem before the gap */
 void search_prev(void) {
-	char *ptr = memmem(&buf[buf_pos + buf_gap], buf_size - buf_gap - buf_pos, search, search_used());
+/*
+	int i = 0;
+	char *ptr = memmem(&buf, buf_pos, );
+
+	
+*/
+}
+/* memmem after the gap */
+void search_next(void) {
+	char *ptr = memmem(&buf[buf_pos + buf_gap + search_used], buf_size - buf_gap - buf_pos - search_used, search, search_used);
+	int i = 0;
 
 	if (ptr == NULL) {
 		return;
 	}
 
-	
-}
-
-void search_next(void) {
-	/* memmem after the gap */
+	i = ptr - buf - buf_gap;
+	line = nearest_line_index(i);
+	view_line = line;
+	col = i - lines_get(line);
+	abs_col = col;
+	buf_move(lines_get(line) + col);
 }
 
 void search_cursor_left(void) {
@@ -313,8 +346,8 @@ void search_cursor_left(void) {
 }
 
 void search_cursor_right(void) {
-	if (search_cursor < search_used()) {
-		++search_cursor;		
+	if (search_cursor < search_used) {
+		++search_cursor;
 	}
 }
 
@@ -323,71 +356,43 @@ void search_cursor_home(void) {
 }
 
 void search_cursor_end(void) {
-	search_cursor = search_used();
-}
-
-void search_move_left(int n) {
-	int src = 0;
-	int dst = 0;
-
-	if (n > search_pos) {
-		n = search_pos;
-	}	
-
-	src = search_pos - n;
-	dst = src + search_gap;
-	memcpy(&search[dst], &search[src], n * sizeof(char));
-	search_pos -= n;
-}
-
-void search_move_right(int n) {
-	int src = 0;
-	int dst = 0;
-
-	if (n > SEARCH_SIZE - search_gap - search_pos) {
-		n = SEARCH_SIZE - search_gap - search_pos;
-	}
-
-	src = search_pos + search_gap;
-	dst = search_pos;
-	memcpy(&search[dst], &search[src], n * sizeof(char));
-	search_pos += n;
-}
-
-void search_move(int n) {
-	if (n < search_pos) {
-		search_move_left(search_pos - n);
-	} else if (n > search_pos) {
-		search_move_right(n - search_pos);
-	}
+	search_cursor = search_used;
 }
 
 void search_delete(void) {
-/*
-	if () {
-		search_move(search_cursor);
-		search_gap++;
-	}
-*/
-}
-
-void search_backspace(void) {
-/*
-	if () {
-		search_move(search_cursor);
-		search
-		search_gap++;
-	}
-*/
-}
-
-void search_insert(int c) {
-	if (search_gap == 0 || !isprint(c)) {
+	if (search_cursor == search_used) {
 		return;
 	}
 
-	search[search_pos++] = c;
-	--search_gap;
+	memcpy(
+		&search[search_cursor],
+		&search[search_cursor + 1],
+		(search_used - search_cursor - 1) * sizeof(char)
+	);
+	--search_used;
+}
+
+void search_backspace(void) {
+	if (search_cursor == 0) {
+		return;
+	}
+
+	--search_cursor;
+	search_delete();
+}
+
+void search_insert(int c) {
+	if (search_used >= SEARCH_SIZE || !isprint(c)) {
+		return;
+	}
+
+	memcpy(
+		&search[search_cursor + 1],
+		&search[search_cursor],
+		(search_used - search_cursor) * sizeof(char)
+	);
+	search[search_cursor++] = c;
+	++search_used;
 }
 
 void view_init(void) {
@@ -405,7 +410,7 @@ void view_grow(int n) {
 
 void view_push(char *s, int n) {
 	view_grow(n);
-	memcpy(view + view_used, s, n);
+	memcpy(view + view_used, s, n * sizeof(char));
 	view_used += n;
 }
 
@@ -417,7 +422,7 @@ void view_push_char(char c) {
 void view_write_char(char c) {
 	if (c == '\n') {
 		view_push("\r\n", 2);
-		view_rows++;
+		++view_rows;
 	} else if (c == '\t') {
 		int i;
 
@@ -437,7 +442,7 @@ void view_write_status(void) {
 		break;
 	case SEARCH:
 		view_push("SEARCH: ", 8);
-		view_push(search, search_used());
+		view_push(search, search_used);
 		break;
 	case WRITTEN:
 		view_push("written", 7);
@@ -470,7 +475,7 @@ void view_write_cursor_search(void) {
 	char cbuf[32] = { 0 };
 	int len = 0;
 	int y = ws.ws_row;
-	int x = 8 + search_used() + 1;
+	int x = 8 + search_cursor + 1;
 
 	len = snprintf(cbuf, sizeof(cbuf), "\x1b[%d;%dH", y, x);
 	view_push(cbuf, len);
@@ -619,19 +624,19 @@ void cursor_page_down(void) {
 void decrement_lines(void) {
 	int i;
 
-	for (i = line + 1; i < lines_pos; i++) {
-		lines[i]--;
+	for (i = line + 1; i < lines_pos; ++i) {
+		--lines[i];
 	}
 
-	for (i += lines_gap; i < lines_size; i++) {
-		lines[i]--;
+	for (i += lines_gap; i < lines_size; ++i) {
+		--lines[i];
 	}
 }
 
 void delete(void) {
 	int cursor = lines_get(line) + col;
 
-	if (buf_pos + buf_gap >= buf_size) {
+	if (cursor + buf_gap >= buf_size) {
 		return;
 	}
 
@@ -821,6 +826,9 @@ void input_normal(int c) {
 	case BACKSPACE:
 		backspace();
 		break;
+	case DEL:
+		delete();
+		break;
 	case ENTER:
 		insert_line();
 		break;
@@ -831,6 +839,7 @@ void input_normal(int c) {
 		delete_to_end_of_line();
 		break;
 	case CTRL_KEY('f'):
+		search_clear();
 		searching = 1;
 		status = SEARCH;
 		break;
