@@ -288,24 +288,25 @@ int lines_get_len(int i) {
 	}
 }
 
+/*
+ * reimplement as binary search maybe? probably not that needed though
+ */
 int nearest_line_index(int l) {
-	int min = 0;
-	int max = lines_size - 1;
-	int i = (min + max) / 2;
+	int i = 0;
 
-	while (max - min > 1) {
-		i = (min + max) / 2;
-
+	for (i = 0; i < lines_pos; ++i) {
 		if (lines[i] > l) {
-			max = i;
-		} else if (lines[i] < l) {
-			min = i;
-		} else {
-			return i;	
+			return i - 1;
 		}
 	}
 
-	return min;
+	for (i += lines_gap; i < lines_size; ++i) {
+		if (lines[i] > l) {
+			return i - 1 - lines_gap;
+		}
+	}
+
+	return 0;
 }
 
 void search_clear(void) {
@@ -415,14 +416,21 @@ void view_push(char *s, int n) {
 }
 
 void view_push_char(char c) {
+	/* TODO: THIS IS VERY STUPID */
+	if (view_cols >= ws.ws_col) {
+		return;
+	}
+
 	view_grow(1);
 	view[view_used++] = c;
+	++view_cols;
 }
 
 void view_write_char(char c) {
 	if (c == '\n') {
 		view_push("\r\n", 2);
 		++view_rows;
+		view_cols = 0;
 	} else if (c == '\t') {
 		int i;
 
