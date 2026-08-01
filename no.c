@@ -687,7 +687,7 @@ void view_push_char(char c)
  * as previously mentioned, we have to reconcile the "flat" layout of the gap
  * buffer with the "2d" layout of a terminal display.
  *
- * we can just print both halves of the gap buffer as is because
+ * we cant just print both halves of the gap buffer as is because
  * 1. each new line MUST be followed by a carriage return, otherwise the output
  *    will end up
  *                just like this
